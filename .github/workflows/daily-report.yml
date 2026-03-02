@@ -1,0 +1,52 @@
+name: Daily Comp Sales Report
+
+on:
+  schedule:
+    # Run at 8:00 AM Mountain Time (UTC-7 = 15:00 UTC, UTC-6 DST = 14:00 UTC)
+    # Using 14:00 UTC for MDT (March-November)
+    - cron: '0 14 * * *'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: write
+  pages: write
+
+jobs:
+  scrape-and-report:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0  # Full history for data persistence
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install dependencies
+        run: pip install -r requirements.txt
+
+      - name: Run daily pipeline
+        env:
+          SLACK_WEBHOOK_URL: ${{ secrets.SLACK_WEBHOOK_URL }}
+          DASHBOARD_URL: https://${{ github.repository_owner }}.github.io/${{ github.event.repository.name }}/data/dashboard.html
+        run: python main.py
+
+      - name: Commit data changes
+        run: |
+          git config user.name "EV Auto Bot"
+          git config user.email "bot@evauto.com"
+          git add data/
+          git diff --cached --quiet || git commit -m "ð Daily comp sales data â $(date +%Y-%m-%d)"
+          git push
+
+      - name: Deploy dashboard to GitHub Pages
+        uses: peaceiris/actions-gh-pages@v3
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_dir: ./data
+          publish_branch: gh-pages
+          keep_files: true
